@@ -1,0 +1,20 @@
+{
+  "name": "Debounce",
+  "keywords": "button, debounce, input, signal",
+  "description": "A 16-bit debounce library for button inputs based on the Ultimate Debouncer approach by Elliot Williams",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/brooksbUWO/Debounce.git"
+  },
+  "authors": [
+    {
+      "name": "brooks",
+      "email": "brooksb@uwosh.edu",
+      "maintainer": true
+    }
+  ],
+  "version": "1.0.0",
+  "license": "MIT",
+  "frameworks": "arduino",
+  "platforms": "*"
+}
