@@ -11,6 +11,7 @@
 // -----------	-----------	-----------------------
 // 14-APR-2022	brooks		program start
 // 27-MAR-2025	brooks		updated to 16-bit history per article
+// 30-MAR-2025	brooks		added double press detection
 // ****************************************************************************
 
 // Include Files
@@ -72,6 +73,139 @@ void Debounce::update(void)
     
     // Update the previous state for state change detection
     _prevState = isDown();
+    
+    // Check for button events
+    uint8_t buttonPressed = isPressed();
+    uint8_t buttonReleased = isReleased();
+    
+    // Call callbacks if registered
+    if (buttonPressed && _pressCallback != NULL) 
+    {
+        _pressCallback();
+    }
+    
+    if (buttonReleased && _releaseCallback != NULL) 
+    {
+        _releaseCallback();
+    }
+    
+    // Update double press state machine if enabled
+    if (_doublePressEnabled) 
+    {
+        updateDoublePress();
+    }
+    
+    // Long press detection
+    static bool wasDown = false;
+    static unsigned long pressStartTime = 0;
+    
+    if (isDown()) 
+    {
+        if (!wasDown) 
+        {
+            // Button just went down
+            wasDown = true;
+            pressStartTime = millis();
+            _longPressDetected = false;
+        }
+        else if (!_longPressDetected && (millis() - pressStartTime >= _longPressTime)) 
+        {
+            // Long press detected
+            _longPressDetected = true;
+            
+            // Call long press start callback if registered
+            if (_longPressStartCallback != NULL)
+            {
+                _longPressStartCallback();
+            }
+        }
+    }
+    else 
+    {
+        // Button is up
+        if (wasDown) 
+        {
+            wasDown = false;
+            
+            // If long press was active, call end callback
+            if (_longPressDetected && _longPressEndCallback != NULL) 
+            {
+                _longPressEndCallback();
+            }
+        }
+    }
+}
+
+void Debounce::updateDoublePress(void)
+{
+    // State machine for double press detection
+    switch (_dpState) 
+    {
+        case DP_IDLE:
+            // Waiting for first press
+            if (isPressed()) 
+            {
+                _dpState = DP_FIRST_DETECTED;
+                _firstPressTime = millis();
+            }
+            break;
+            
+        case DP_FIRST_DETECTED:
+            // First press detected, waiting for release
+            if (isReleased()) 
+            {
+                _dpState = DP_AWAITING_SECOND;
+            }
+            break;
+            
+        case DP_AWAITING_SECOND:
+            // Between presses, waiting for second press
+            if (isPressed()) 
+            {
+                // Second press arrived within window
+                if (millis() - _firstPressTime < _doublePressWindow) 
+                {
+                    _dpState = DP_DETECTED;
+                    _isDoublePressed = true;
+                    
+                    // Call double press callback if registered
+                    if (_doublePressCallback != NULL) 
+                    {
+                        _doublePressCallback();
+                    }
+                }
+                else 
+                {
+                    // Too long between presses, treat as new first press
+                    _dpState = DP_FIRST_DETECTED;
+                    _firstPressTime = millis();
+                }
+            }
+            // Timeout check
+            else if (millis() - _firstPressTime >= _doublePressWindow) 
+            {
+                // Timeout elapsed without second press
+                _dpState = DP_IDLE;
+            }
+            break;
+            
+        case DP_DETECTED:
+            // Double press was detected, wait for release
+            if (isReleased()) 
+            {
+                _dpState = DP_COOLDOWN;
+            }
+            break;
+            
+        case DP_COOLDOWN:
+            // Reset the state machine after a short cooldown
+            if (millis() - _firstPressTime >= 50) 
+            {
+                _isDoublePressed = false;
+                _dpState = DP_IDLE;
+            }
+            break;
+    }
 }
 
 uint8_t Debounce::isPressed(void)
@@ -113,4 +247,61 @@ uint8_t Debounce::stateChanged(void)
     uint8_t currentState = isDown();
     uint8_t changed = (currentState != _prevState);
     return changed;
+}
+
+uint8_t Debounce::isDoublePressed(void)
+{
+    if (!_doublePressEnabled) 
+    {
+        return 0;
+    }
+    
+    if (_isDoublePressed) 
+    {
+        _isDoublePressed = false;  // Clear flag after reading (fire once)
+        return 1;
+    }
+    
+    return 0;
+}
+
+void Debounce::enableDoublePressDetection(bool enable)
+{
+    _doublePressEnabled = enable;
+    _dpState = DP_IDLE;  // Reset state machine
+}
+
+void Debounce::setDoublePressWindow(unsigned long windowMs)
+{
+    _doublePressWindow = windowMs;
+}
+
+void Debounce::setLongPressTime(unsigned long timeMs)
+{
+    _longPressTime = timeMs;
+}
+
+void Debounce::onPress(ButtonCallback callback)
+{
+    _pressCallback = callback;
+}
+
+void Debounce::onRelease(ButtonCallback callback)
+{
+    _releaseCallback = callback;
+}
+
+void Debounce::onDoublePress(ButtonCallback callback)
+{
+    _doublePressCallback = callback;
+}
+
+void Debounce::onLongPressStart(ButtonCallback callback)
+{
+    _longPressStartCallback = callback;
+}
+
+void Debounce::onLongPressEnd(ButtonCallback callback)
+{
+    _longPressEndCallback = callback;
 }
